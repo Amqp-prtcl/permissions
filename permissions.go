@@ -9,8 +9,13 @@ const (
 	AdminName    = "admin"
 )
 
+type Permission struct {
+	Mod  string
+	Perm string
+}
+
 type Permissions struct {
-	Permissions map[string][]string
+	Permissions map[string][]string `json:"perms,omitempty" bson:"perms"`
 	mu          sync.RWMutex
 }
 
@@ -77,6 +82,11 @@ func (p *Permissions) HasPerm(mod string, perm string) bool {
 	return false
 }
 
+// shortcut for p.HasPerm(perm.Mod, perm.Perm)
+func (p *Permissions) HasPermS(perm Permission) bool {
+	return p.HasPerm(perm.Mod, perm.Perm)
+}
+
 func (p *Permissions) HasGlobalPerm(perm string) bool {
 	return p.HasPerm(GlobalModule, perm)
 }
@@ -97,6 +107,11 @@ func (p *Permissions) AddPerm(mod string, perm string) {
 		}
 	}
 	p.Permissions[mod] = append(perms, perm) // append(nil, val) initiates a new array of type val
+}
+
+// shortcut for p.AddPerm(perm.Mod, perm.Perm)
+func (p *Permissions) AddPermS(perm Permission) {
+	p.AddPerm(perm.Mod, perm.Perm)
 }
 
 func (p *Permissions) AddGlobalPerm(perm string) {
@@ -129,6 +144,11 @@ func (p *Permissions) RemovePerm(mod string, perm string) {
 			return
 		}
 	}
+}
+
+// shortcut for p.RemovePerm(perm.Mod, perm.Perm)
+func (p *Permissions) RemovePermS(perm Permission) {
+	p.RemovePerm(perm.Mod, perm.Perm)
 }
 
 func (p *Permissions) RemoveAdmin() {
