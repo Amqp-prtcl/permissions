@@ -9,9 +9,14 @@ const (
 	AdminName    = "admin"
 )
 
+// it is nil if either mod or perm is zero value'ed
 type Permission struct {
 	Mod  string
 	Perm string
+}
+
+func IsNullPermission(mod string, perm string) bool {
+	return mod == "" || perm == ""
 }
 
 type Permissions struct {
@@ -60,6 +65,10 @@ func (p *Permissions) IsModuleAdmin(mod string) bool {
 // HasAdmin checks is entity has a particular permission
 // Use GlobalModule field to read module independent permissions
 func (p *Permissions) HasPerm(mod string, perm string) bool {
+	if IsNullPermission(mod, perm) {
+		return true
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -93,6 +102,10 @@ func (p *Permissions) HasGlobalPerm(perm string) bool {
 
 // AddPerm is idempotent
 func (p *Permissions) AddPerm(mod string, perm string) {
+	if IsNullPermission(mod, perm) {
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -127,6 +140,10 @@ func (p *Permissions) SetModuleAdmin(mod string) {
 }
 
 func (p *Permissions) RemovePerm(mod string, perm string) {
+	if IsNullPermission(mod, perm) {
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
