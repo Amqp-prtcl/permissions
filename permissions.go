@@ -41,7 +41,12 @@ func (p *Permissions) IsAdmin() bool {
 	return false
 }
 
+// Warning: will always return true if mod is zero value'ed
 func (p *Permissions) IsModuleAdmin(mod string) bool {
+	if mod == "" {
+		return true
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	// this function cannot use HasPerm() as it will result in an infinite recursion
