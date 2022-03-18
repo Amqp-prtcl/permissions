@@ -15,6 +15,10 @@ type Permission struct {
 	Perm string
 }
 
+func NewPermission(mod string, perm string) Permission {
+	return Permission{Mod: mod, Perm: perm}
+}
+
 func IsNullPermission(mod string, perm string) bool {
 	return mod == "" || perm == ""
 }
