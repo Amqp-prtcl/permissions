@@ -24,6 +24,10 @@ type Permissions struct {
 	mu          sync.RWMutex
 }
 
+func NewPermsions() *Permissions {
+	return &Permissions{Permissions: make(map[string][]string), mu: sync.RWMutex{}}
+}
+
 func (p *Permissions) IsAdmin() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
