@@ -23,13 +23,19 @@ func IsNullPermission(mod string, perm string) bool {
 	return mod == "" || perm == ""
 }
 
+type Perms map[string][]string `json:"perms,omitempty" bson:"perms"`
+
 type Permissions struct {
-	Permissions map[string][]string `json:"perms,omitempty" bson:"perms"`
+	Permissions Perms
 	mu          sync.RWMutex
 }
 
 func NewPermissions() *Permissions {
 	return &Permissions{Permissions: make(map[string][]string), mu: sync.RWMutex{}}
+}
+
+func NewPermissionsFromCopy(perms Perms) *Permissions {
+	return &Permissions{Permissions: perms, mu: sync.RWMutex{}}
 }
 
 func (p *Permissions) IsAdmin() bool {
@@ -245,7 +251,7 @@ func (p *Permissions) ForEach(f func(mod string, perm string)) {
 	}
 }
 
-func (p *Permissions) Copy() map[string][]string {
+func (p *Permissions) Copy() Perms {
 	var m = map[string][]string{}
 	p.ForEach(func(mod, perm string) {
 		m[mod] = append(m[mod], perm)
