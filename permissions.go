@@ -23,7 +23,7 @@ func IsNullPermission(mod string, perm string) bool {
 	return mod == "" || perm == ""
 }
 
-type Perms map[string][]string `json:"perms,omitempty" bson:"perms"`
+type Perms map[string][]string
 
 type Permissions struct {
 	Permissions Perms
