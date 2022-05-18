@@ -5,7 +5,7 @@ import "sync"
 const (
 
 	// use this field to read module independent permissions
-	GlobalModule = "global"
+	GlobalModule = "role"
 	AdminName    = "admin"
 )
 
