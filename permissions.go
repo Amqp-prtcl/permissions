@@ -4,27 +4,14 @@ import (
 	"sync"
 )
 
-const (
+var (
 
 	// use this field to read module independent permissions
 	GlobalModule = "global"
 	AdminName    = "admin"
 )
 
-// it is nil if either mod or perm is zero value'ed
-type Permission struct {
-	Mod  string
-	Perm string
-}
-
-func NewPermission(mod string, perm string) Permission {
-	return Permission{Mod: mod, Perm: perm}
-}
-
-func IsNullPermission(mod string, perm string) bool {
-	return mod == "" || perm == ""
-}
-
+// Permissions represents a
 type Permissions struct {
 	Permissions map[string][]string `bson:"perms,inline"`
 	mu          sync.RWMutex
@@ -34,67 +21,31 @@ func NewPermissions() *Permissions {
 	return &Permissions{Permissions: make(map[string][]string), mu: sync.RWMutex{}}
 }
 
-func (p *Permissions) IsAdmin() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	// this function cannot use HasPerm() as it will result in an infinite recursion
-	// so it needs to be coded manually
-	perms, ok := p.Permissions[GlobalModule]
-	if !ok {
-		return false
-	}
-	for _, per := range perms {
-		if per == AdminName {
-			return true
-		}
-	}
-	return false
+func NewPermissionsFromMap(perms map[string][]string) *Permissions {
+	return &Permissions{Permissions: perms, mu: sync.RWMutex{}}
 }
 
-// Warning: will always return true if mod is zero value'ed
-func (p *Permissions) IsModuleAdmin(mod string) bool {
-	if mod == "" {
-		return true
-	}
+///////////////////////////////////////////////////////////////////
+/////////////////////////  Getters  ///////////////////////////////
+///////////////////////////////////////////////////////////////////
 
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	// this function cannot use HasPerm() as it will result in an infinite recursion
-	// so it needs to be coded manually
-	if p.IsAdmin() {
-		return true
-	}
-
-	perms, ok := p.Permissions[mod]
-	if !ok {
-		return false
-	}
-	for _, per := range perms {
-		if per == AdminName {
-			return true
-		}
-	}
-	return false
-}
-
-// HasAdmin checks is entity has a particular permission
+// HasPerm checks if entity has a particular permission
 // Use GlobalModule field to read module independent permissions
-func (p *Permissions) HasPerm(mod string, perm string) bool {
-	if IsNullPermission(mod, perm) {
+//
+// Please Note that an empty module will be replaced by GlobalModule
+// and in case of an empty perm, HasPerm will always return true
+func (p *Permissions) HasPerm(module string, perm string) bool {
+	if perm == "" {
 		return true
+	}
+	if module == "" {
+		module = GlobalModule
 	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	if p.IsAdmin() {
-		return true
-	}
-	if p.IsModuleAdmin(mod) {
-		return true
-	}
-
-	perms, ok := p.Permissions[mod]
+	perms, ok := p.Permissions[module]
 	if !ok {
 		return false
 	}
@@ -106,42 +57,58 @@ func (p *Permissions) HasPerm(mod string, perm string) bool {
 	return false
 }
 
-// shortcut for p.HasPerm(perm.Mod, perm.Perm)
-func (p *Permissions) HasPermS(perm Permission) bool {
-	return p.HasPerm(perm.Mod, perm.Perm)
+// Same as p.HasPerm(GlobalModule, AdminName)
+func (p *Permissions) IsAdmin() bool {
+	return p.HasPerm(GlobalModule, AdminName)
 }
 
+// Same as p.HasPerm(module, AdminName)
+func (p *Permissions) IsModuleAdmin(module string) bool {
+	return p.HasPerm(module, AdminName)
+}
+
+// Same as p.HasPerm(GlobalModule, perm) or p.HasPerm("", perm)
 func (p *Permissions) HasGlobalPerm(perm string) bool {
 	return p.HasPerm(GlobalModule, perm)
 }
 
-// AddPerm is idempotent
-func (p *Permissions) AddPerm(mod string, perm string) {
-	if IsNullPermission(mod, perm) {
+///////////////////////////////////////////////////////////////////
+//////////////////////////  Adders  ///////////////////////////////
+///////////////////////////////////////////////////////////////////
+
+// AddPerm is idempotent and if module is empty it will be replaced by GlobalModule
+func (p *Permissions) AddPerm(module string, perm ...string) {
+	if len(perm) == 0 || perm[0] == "" {
 		return
+	}
+	if module == "" {
+		module = GlobalModule
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	perms, ok := p.Permissions[module]
+	if !ok {
+		p.Permissions[module] = append(perms, perm...) // // append(nil, val) initiates a new array of type val
+		return
+	}
 
-	perms, ok := p.Permissions[mod]
-	if ok {
-		// entity already has some permissions, so we need to check that it doesn't already have it before appending it
+	for _, current := range perm { // append each permission
+		if current == "" {
+			continue
+		}
+
 		for _, pe := range perms {
-			if pe == perm {
+			if pe == current {
 				// user already has permission
 				return
 			}
 		}
+		p.Permissions[module] = append(perms, current)
 	}
-	p.Permissions[mod] = append(perms, perm) // append(nil, val) initiates a new array of type val
 }
 
-// shortcut for p.AddPerm(perm.Mod, perm.Perm)
-func (p *Permissions) AddPermS(perm Permission) {
-	p.AddPerm(perm.Mod, perm.Perm)
-}
-
+// This is the same as p.AddPerm("", perm)
 func (p *Permissions) AddGlobalPerm(perm string) {
 	p.AddPerm(GlobalModule, perm)
 }
@@ -150,13 +117,21 @@ func (p *Permissions) SetAdmin() {
 	p.AddPerm(GlobalModule, AdminName)
 }
 
-func (p *Permissions) SetModuleAdmin(mod string) {
-	p.AddPerm(mod, AdminName)
+func (p *Permissions) SetModuleAdmin(module string) {
+	p.AddPerm(module, AdminName)
 }
 
+///////////////////////////////////////////////////////////////////
+///////////////////////////  Removers  ////////////////////////////
+///////////////////////////////////////////////////////////////////
+
+// RemovePerm is idempotent and if module is empty it will be replaced by GlobalModule
 func (p *Permissions) RemovePerm(mod string, perm string) {
-	if IsNullPermission(mod, perm) {
+	if perm == "" {
 		return
+	}
+	if mod == "" {
+		mod = GlobalModule
 	}
 
 	p.mu.Lock()
@@ -178,17 +153,12 @@ func (p *Permissions) RemovePerm(mod string, perm string) {
 	}
 }
 
-// shortcut for p.RemovePerm(perm.Mod, perm.Perm)
-func (p *Permissions) RemovePermS(perm Permission) {
-	p.RemovePerm(perm.Mod, perm.Perm)
-}
-
 func (p *Permissions) RemoveAdmin() {
 	p.RemovePerm(GlobalModule, AdminName)
 }
 
-func (p *Permissions) RemoveModuleAdmin(mod string) {
-	p.RemovePerm(mod, AdminName)
+func (p *Permissions) RemoveModuleAdmin(module string) {
+	p.RemovePerm(module, AdminName)
 }
 
 // RemoveAll removes all permissions entity has
@@ -198,7 +168,8 @@ func (p *Permissions) RemoveAll() {
 	p.mu.Unlock()
 }
 
-// RemoveAllButAdmin removes all permissions entity has except global admin permission (only if entity initially has it)
+// RemoveAllButAdmin removes all permissions entity has except its global
+// admin permission (only if it already has it)
 func (p *Permissions) RemoveAllButAdmin() {
 	admin := p.IsAdmin()
 	p.mu.Lock()
@@ -209,33 +180,32 @@ func (p *Permissions) RemoveAllButAdmin() {
 	}
 }
 
-// RemoveAll removes all permissions entity has form a module
+// RemoveAll removes all permissions entity has from a module
 func (p *Permissions) RemoveAllModule(mod string) {
 	p.mu.Lock()
-	_, ok := p.Permissions[mod]
-	if ok {
-		p.Permissions[mod] = []string{}
-	}
+	delete(p.Permissions, mod)
 	p.mu.Unlock()
 }
 
-// RemoveAll removes all permissions entity has form a module except module admin permission (only if entity initially has it)
-func (p *Permissions) RemoveAllModuleButAdmin(mod string) {
+// RemoveAll removes all permissions an entity has form a module except module
+// admin permission (only if it already has it)
+func (p *Permissions) RemoveAllModuleButKeepAdmin(mod string) {
 	admin := p.IsModuleAdmin(mod)
 	p.mu.Lock()
 	_, ok := p.Permissions[mod]
 	if ok {
 		// change to a switch statement ?
 		if admin {
-			p.Permissions[mod] = append(p.Permissions[mod], AdminName)
+			p.Permissions[mod] = p.Permissions[mod][:1]
+			p.Permissions[mod][0] = AdminName
 		} else {
-			p.Permissions[mod] = []string{}
+			p.Permissions[mod] = p.Permissions[mod][:0]
 		}
 	}
 	p.mu.Unlock()
 }
 
-// interacting with p inside of f will cause a deadlock
+// Please Note that calling any modifying Permissions method (add or remove) inside f will result in a deadlock
 func (p *Permissions) ForEach(f func(mod string, perm string)) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -247,10 +217,35 @@ func (p *Permissions) ForEach(f func(mod string, perm string)) {
 	}
 }
 
-func (p *Permissions) Copy() map[string][]string {
+// FIXME might be broken (not tested)
+func (p *Permissions) Filter(f func(mod string, perm string) bool) {
+	p.mu.Lock()
+	defer p.mu.RUnlock()
+
+	for mod, perms := range p.Permissions {
+		for i := 0; i < len(perms); i++ {
+			if !f(mod, perms[i]) {
+				perms[i] = perms[len(perms)-1]
+				p.Permissions[mod] = perms[:len(perms)-1]
+				i--
+			}
+		}
+	}
+}
+
+func (p *Permissions) CopyMap() map[string][]string {
 	var m = map[string][]string{}
-	p.ForEach(func(mod, perm string) {
-		m[mod] = append(m[mod], perm)
-	})
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for k, v := range p.Permissions {
+		m[k] = append(m[k], v...)
+	}
 	return m
+}
+
+func (p *Permissions) Copy() *Permissions {
+	return &Permissions{
+		Permissions: p.CopyMap(),
+		mu:          sync.RWMutex{},
+	}
 }
